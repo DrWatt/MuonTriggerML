@@ -16,7 +16,11 @@ from qkeras.qlayers import QDense, QActivation
 from qkeras.quantizers import quantized_bits, quantized_relu
 
 
-outrootname = "SENZA_DROPOUT"
+from tensorflow_model_optimization.python.core.sparsity.keras import prune, pruning_callbacks, pruning_schedule
+from tensorflow_model_optimization.sparsity.keras import strip_pruning
+
+
+outrootname = "QKeras_Model_2_pruned"
 Nfolder = check_output("if [ ! -d \"" + outrootname + "\" ]; then mkdir \"" + outrootname + "\";fi",shell=True)
 Nfolder = check_output("if [ ! -d \"" + outrootname + "/hist\" ]; then mkdir \"" + outrootname + "/hist\";fi",shell=True)
 
@@ -141,33 +145,64 @@ def preproc(test=False):
 
 
 def Q_baseline_model(size,epochs,optimizer,X_training,y_training,X_validation,y_validation,output_name):
+    
+    pruning = True
     # create model
     name="RMSE validation"
     name2="RMSE training"
     history = History()
     model = Sequential()
-    model.add(QDense(81,  input_shape=(27,),kernel_quantizer=quantized_bits(6,0,alpha=1),bias_quantizer=quantized_bits(6,0,alpha=1), kernel_initializer='random_normal',activation='sigmoid'))
-    model.add(QActivation(activation=quantized_relu(6), name='relu1'))
-    model.add(Dropout(rate=0.2))
-    model.add(QDense(50,kernel_quantizer=quantized_bits(6,0,alpha=1),bias_quantizer=quantized_bits(6,0,alpha=1),activation='sigmoid'))
-    model.add(QActivation(activation=quantized_relu(6), name='relu2'))
-    model.add(Dropout(rate=0.2))
+    model.add(QDense(81,  input_shape=(27,),kernel_quantizer=quantized_bits(8,0),bias_quantizer=quantized_bits(8,0), kernel_initializer='random_normal'))
+    model.add(QActivation(activation=quantized_relu(8), name='relu1'))
+    # model.add(Dropout(rate=0.2))
+    model.add(QDense(50,kernel_quantizer=quantized_bits(8,0),bias_quantizer=quantized_bits(8,0)))
+    model.add(QActivation(activation=quantized_relu(8), name='relu2'))
+    # model.add(Dropout(rate=0.2))
     model.add(Dense(1,activation='sigmoid'))
     #model.add(QActivation(activation=hard_sigmoid(6), name='sigm3'))
     #model.add(Activation("sigmoid"))
+    
+    if pruning == True:
+        print("////////////////////////Training Model with pruning")
+        pruning_params = {"pruning_schedule" : pruning_schedule.ConstantSparsity(0.75, begin_step=2000, frequency=100)}
+        model = prune.prune_low_magnitude(model, **pruning_params)
+        model.compile(loss='mean_squared_error', optimizer=optimizer)
+        model.fit(X_training, y_training,
+                  batch_size=size,
+                  epochs=epochs,
+                  verbose=1,
+                  validation_data=(X_validation, y_validation),
+                  callbacks=[history,pruning_callbacks.UpdatePruningStep()])
+        model = strip_pruning(model)
+    else:
+        print("////////////////////////Training Model WITHOUT pruning")
+        model.compile(loss='mean_squared_error', optimizer=optimizer)
+        model.fit(X_training, y_training,
+                  batch_size=size,
+                  epochs=epochs,
+                  verbose=1,
+                  validation_data=(X_validation, y_validation),
+                  callbacks=[history])
     # Compile model
-    model.compile(loss='mean_squared_error', optimizer=optimizer)
-    model.fit(X_training, y_training,
-          batch_size=size,
-          epochs=epochs,
-          verbose=1,
-          validation_data=(X_validation, y_validation),callbacks=[history])
-
+    # model.compile(loss='mean_squared_error', optimizer=optimizer)
+    # model.fit(X_training, y_training,
+    #       batch_size=size,
+    #       epochs=epochs,
+    #       verbose=1,
+    #       validation_data=(X_validation, y_validation),callbacks=[history])
+    w = model.layers[0].weights[0].numpy()
+    h, b = np.histogram(w, bins=100)
+    plt.figure(figsize=(7,7))
+    plt.bar(b[:-1], h, width=b[1]-b[0])
+    plt.semilogy()
+    plt.savefig("Prova",format='png')
+    print('% of zeros = {}'.format(np.sum(w==0)/np.size(w)))
     w = []
     for layer in model.layers:
+        print(layer)
         w.append(layer.get_weights())
     
-    print(w)
+    #print(w)
     train_predictions = model.predict(X_training)
     predictions = model.predict(X_validation)
     lin_mse = mean_squared_error(y_validation, predictions)
@@ -206,6 +241,8 @@ def Q_baseline_model(size,epochs,optimizer,X_training,y_training,X_validation,y_
     plt.savefig(outrootname + '/' +'2'+ output_name,format='png',dpi=800)
     #plt.show()
     del ax,ax2
+    
+
     return model,w
 
 
@@ -234,7 +271,7 @@ X,Y = preproc()
 def run(X,Y):
     x_train, x_valid, y_train, y_valid = train_test_split(X, Y, test_size=0.2)
     
-    model,w = Q_baseline_model(300,400,'Adam',x_train, y_train, x_valid, y_valid,'Adam.png')
+    model,w = Q_baseline_model(200,5,'Adam',x_train, y_train, x_valid, y_valid,'Adam.png')
     model.save(outrootname + '/' + outrootname + '.h5')
     np.savetxt(outrootname + '/' +"hist/weights_1.csv",w[0][0],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/weights_2.csv",w[2][0],delimiter=',')
