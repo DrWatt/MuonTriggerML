@@ -3,9 +3,11 @@
 
 import numpy as np
 import pandas as pd
+from tensorflow.random import set_seed
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import Dropout, Activation
+from keras.optimizers import Adam
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from keras.callbacks import History 
@@ -19,8 +21,11 @@ from qkeras.quantizers import quantized_bits, quantized_relu
 from tensorflow_model_optimization.python.core.sparsity.keras import prune, pruning_callbacks, pruning_schedule
 from tensorflow_model_optimization.sparsity.keras import strip_pruning
 
+seed = 1563
+np.random.seed(seed)
+set_seed(seed)
 
-outrootname = "QKeras_Model_2_pruned"
+outrootname = "QKeras_Model_4_Pruned_120"
 Nfolder = check_output("if [ ! -d \"" + outrootname + "\" ]; then mkdir \"" + outrootname + "\";fi",shell=True)
 Nfolder = check_output("if [ ! -d \"" + outrootname + "/hist\" ]; then mkdir \"" + outrootname + "/hist\";fi",shell=True)
 
@@ -85,7 +90,7 @@ def preprocess_targets(muon_dataframe):
     return output_targets.astype(np.float32)
 
 
-def preproc(test=False):
+def datasets():
     out_dataframe = pd.read_csv('../output/bxcut_full_muon.csv')
     muon_dataframe_test = pd.read_csv('../output/bxcut_full_test.csv')
     
@@ -100,13 +105,48 @@ def preproc(test=False):
     muon_dataframe_test["4dtPrimitive.phiB"] = muon_dataframe_test["4dtPrimitive.phiB"]/512.
     
     out_dataframe = out_dataframe[out_dataframe['genParticle.pt'] <= 200]
+    
+    #Creating different datasets
+    
+    out_dataframe60 = out_dataframe[out_dataframe['genParticle.pt'] <= 60]
+    out_dataframe120 = out_dataframe[out_dataframe['genParticle.pt'] <= 120]
+    out_dataframe120 = out_dataframe120[out_dataframe120['genParticle.pt'] > 60]
+    out_dataframe180 = out_dataframe[out_dataframe['genParticle.pt'] <= 180]
+    out_dataframe180 = out_dataframe180[out_dataframe180['genParticle.pt'] > 120]
+    
+
+    
+    
+    
+    out_dataframe60.to_csv("out60.csv")
+    out_dataframe120.to_csv("out120.csv")
+    out_dataframe180.to_csv("out180.csv")
+    
+    
+    out_dataframe.to_csv("out_data.csv")
+    
     muon_dataframe_test = muon_dataframe_test[muon_dataframe_test['genParticle.pt'] <= 200]
+    
+    muon_dataframe_test60 = muon_dataframe_test[muon_dataframe_test['genParticle.pt'] <= 60]
+    muon_dataframe_test120 = muon_dataframe_test[muon_dataframe_test['genParticle.pt'] <= 120]
+    muon_dataframe_test120 = muon_dataframe_test120[muon_dataframe_test120['genParticle.pt'] > 60]
+    muon_dataframe_test180 = muon_dataframe_test[muon_dataframe_test['genParticle.pt'] <= 180]
+    muon_dataframe_test180 = muon_dataframe_test180[muon_dataframe_test180['genParticle.pt'] > 120]
+    
+    muon_dataframe_test60.to_csv("test60.csv")
+    muon_dataframe_test120.to_csv("test120.csv")
+    muon_dataframe_test180.to_csv("test180.csv")
+    
+    
+    muon_dataframe_test.to_csv("muon_test.csv")
 
+    return 0
 
-
-
-
-
+def preproc(test=False):
+    
+    out_dataframe = pd.read_csv('out120.csv')
+    muon_dataframe_test = pd.read_csv('test120.csv')
+    
     X = preprocess_features(out_dataframe)
     X_test = preprocess_features(muon_dataframe_test)
     
@@ -152,11 +192,13 @@ def Q_baseline_model(size,epochs,optimizer,X_training,y_training,X_validation,y_
     name2="RMSE training"
     history = History()
     model = Sequential()
-    model.add(QDense(81,  input_shape=(27,),kernel_quantizer=quantized_bits(8,0),bias_quantizer=quantized_bits(8,0), kernel_initializer='random_normal'))
-    model.add(QActivation(activation=quantized_relu(8), name='relu1'))
+    model.add(QDense(50,  input_shape=(27,),kernel_quantizer=quantized_bits(16,0),bias_quantizer=quantized_bits(16,0), kernel_initializer='random_normal'))
+    model.add(QActivation(activation=quantized_relu(16), name='relu1'))
     # model.add(Dropout(rate=0.2))
-    model.add(QDense(50,kernel_quantizer=quantized_bits(8,0),bias_quantizer=quantized_bits(8,0)))
-    model.add(QActivation(activation=quantized_relu(8), name='relu2'))
+    model.add(QDense(25,kernel_quantizer=quantized_bits(16,0),bias_quantizer=quantized_bits(16,0)))
+    model.add(QActivation(activation=quantized_relu(16), name='relu2'))
+    model.add(QDense(10,kernel_quantizer=quantized_bits(16,0),bias_quantizer=quantized_bits(16,0)))
+    model.add(QActivation(activation=quantized_relu(16), name='relu3'))
     # model.add(Dropout(rate=0.2))
     model.add(Dense(1,activation='sigmoid'))
     #model.add(QActivation(activation=hard_sigmoid(6), name='sigm3'))
@@ -173,7 +215,15 @@ def Q_baseline_model(size,epochs,optimizer,X_training,y_training,X_validation,y_
                   verbose=1,
                   validation_data=(X_validation, y_validation),
                   callbacks=[history,pruning_callbacks.UpdatePruningStep()])
+        
         model = strip_pruning(model)
+        w = model.layers[0].weights[0].numpy()
+        h, b = np.histogram(w, bins=100)
+        plt.figure(figsize=(7,7))
+        plt.bar(b[:-1], h, width=b[1]-b[0])
+        plt.semilogy()
+        plt.savefig("Zeros' distribution",format='png')
+        print('% of zeros = {}'.format(np.sum(w==0)/np.size(w)))
     else:
         print("////////////////////////Training Model WITHOUT pruning")
         model.compile(loss='mean_squared_error', optimizer=optimizer)
@@ -190,13 +240,7 @@ def Q_baseline_model(size,epochs,optimizer,X_training,y_training,X_validation,y_
     #       epochs=epochs,
     #       verbose=1,
     #       validation_data=(X_validation, y_validation),callbacks=[history])
-    w = model.layers[0].weights[0].numpy()
-    h, b = np.histogram(w, bins=100)
-    plt.figure(figsize=(7,7))
-    plt.bar(b[:-1], h, width=b[1]-b[0])
-    plt.semilogy()
-    plt.savefig("Prova",format='png')
-    print('% of zeros = {}'.format(np.sum(w==0)/np.size(w)))
+    
     w = []
     for layer in model.layers:
         print(layer)
@@ -269,15 +313,17 @@ X,Y = preproc()
 
 
 def run(X,Y):
-    x_train, x_valid, y_train, y_valid = train_test_split(X, Y, test_size=0.2)
-    
-    model,w = Q_baseline_model(200,5,'Adam',x_train, y_train, x_valid, y_valid,'Adam.png')
+    x_train, x_valid, y_train, y_valid = train_test_split(X, Y, test_size=0.2,random_state=seed)
+    adam = Adam(lr=0.0001) #Default 0.001
+    model,w = Q_baseline_model(100,50,adam,x_train, y_train, x_valid, y_valid,'Adam.png')
     model.save(outrootname + '/' + outrootname + '.h5')
     np.savetxt(outrootname + '/' +"hist/weights_1.csv",w[0][0],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/weights_2.csv",w[2][0],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/weights_3.csv",w[4][0],delimiter=',')
+    np.savetxt(outrootname + '/' +"hist/weights_3.csv",w[6][0],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/bias_1.csv",w[0][1],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/bias_2.csv",w[2][1],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/bias_3.csv",w[4][1],delimiter=',')
-    return w
+    np.savetxt(outrootname + '/' +"hist/bias_3.csv",w[6][1],delimiter=',')
+    return model,w
 

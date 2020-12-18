@@ -2,16 +2,18 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 from keras.models import load_model
+from qkeras.utils import load_qmodel
 from QKeras_Model import preproc
 import hls4ml
+from subprocess import check_output
 
-outrootname = "QKeras_Model_1"
+outrootname = "QKeras_Model_4"
 
 X_test,Y_test = preproc(True)
 # outputFile = root.TFile(outrootname + '/' + outrootname +"_hls.root","recreate")
 # c1 = root.TCanvas("c1","c1");
 name="RMSE"
-model = load_model(outrootname + '/' + outrootname + '.h5')
+model = load_qmodel(outrootname + '/' + outrootname + '.h5')
 
 config = hls4ml.utils.config_from_keras_model(model, granularity='name')
 #print(config)
@@ -59,28 +61,37 @@ for layer in config['LayerName'].keys():
 
 
 
-hls_model = hls4ml.converters.convert_from_keras_model(model, hls_config=config, output_dir='TEST_HLS',fpga_part='xqzu19eg-ffrb1517-2-i')
-hls4ml.utils.plot_model(hls_model, show_shapes=True, show_precision=True, to_file="TEST_HLS.png")
+hls_model = hls4ml.converters.convert_from_keras_model(model, hls_config=config, output_dir=outrootname + '/HLS_Project',fpga_part='xqzu19eg-ffrb1517-2-i')
+#hls4ml.utils.plot_model(hls_model, show_shapes=True, show_precision=True, to_file="TEST_HLS.png")
 hls_model.compile()
 
 
 
 
 
-numxtest=X_test.to_numpy()
-print(numxtest[0])
-print('\n')
-print(numxtest[10])
+# numxtest=X_test.to_numpy()
+# print(numxtest[0])
+# print('\n')
+# print(numxtest[10])
 
-print('\n')
-print(numxtest[1])    
-print('\n')
-print(numxtest[11])
-predictions = hls_model.predict(np.ascontiguousarray(numxtest))
+# print('\n')
+# print(numxtest[1])    
+# print('\n')
+# print(numxtest[11])
+# predictions = hls_model.predict(np.ascontiguousarray(numxtest))
 
 
-np.savetxt("out_hls.csv",predictions,delimiter=',')
+# np.savetxt("out_hls.csv",predictions,delimiter=',')
 
-prof = hls4ml.model.profiling.numerical(keras_model=model, hls_model=hls_model)
+#prof = hls4ml.model.profiling.numerical(keras_model=model, hls_model=hls_model)
 hls4ml_pred, hls4ml_trace = hls_model.trace(np.ascontiguousarray(X_test.to_numpy()))
 keras_trace = hls4ml.model.profiling.get_ymodel_keras(model, np.ascontiguousarray(X_test.to_numpy()))
+np_keras_trace = {}
+for key in keras_trace.keys():
+    np_keras_trace[key] = keras_trace[key].numpy()
+check_output("if [ ! -d \"" + outrootname + "/keras_trace\" ]; then mkdir \"" + outrootname + "/keras_trace\";fi",shell=True)
+check_output("if [ ! -d \"" + outrootname + "/hls4ml_trace\" ]; then mkdir \"" + outrootname + "/hls4ml_trace\";fi",shell=True)
+for key in np_keras_trace.keys():
+    np.savetxt(outrootname + "/keras_trace/"+key+".csv",np_keras_trace[key],delimiter=',')
+for key in hls4ml_trace.keys():
+    np.savetxt(outrootname + "/hls4ml_trace/"+key+".csv",hls4ml_trace[key],delimiter=',')
