@@ -29,7 +29,7 @@ hls_model = hls4ml.converters.convert_from_keras_model(model, hls_config=config,
 #Building project directory with .tcl script for Vivado_hls containing instruction for the synthesis.
 hls_model.compile()
 
-#Saving tracing output
+#Saving tracing output in csv files
 hls4ml_pred, hls4ml_trace = hls_model.trace(np.ascontiguousarray(X_test.to_numpy()))
 keras_trace = hls4ml.model.profiling.get_ymodel_keras(model, np.ascontiguousarray(X_test.to_numpy()))
 np_keras_trace = {}
