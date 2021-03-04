@@ -1,5 +1,5 @@
-# Tommaso  -  Machine Learning and Muons
-
+# FPGA implementation of Muon Momentum assignment with Machine Learning at the CMS Level-1 Trigger
+### Forked from this [repository](https://github.com/Tommaso93/MuonTriggerML)
 ## Python script from ROOT file to flat CSV
 This code allows to read ROOT file content directly into a flat CSV file.
 
