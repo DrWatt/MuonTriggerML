@@ -16,8 +16,9 @@ import matplotlib.pyplot as plt
 from keras.models import load_model
 from subprocess import check_output
 from qkeras.qlayers import QDense, QActivation
-from qkeras.quantizers import quantized_bits, quantized_relu,smooth_sigmoid
+from qkeras.quantizers import quantized_bits, quantized_relu,smooth_sigmoid,quantized_tanh
 import os
+import requests
 os.environ["CUDA_VISIBLE_DEVICES"]="-1"  
 
 from tensorflow_model_optimization.python.core.sparsity.keras import prune, pruning_callbacks, pruning_schedule
@@ -27,9 +28,42 @@ seed = 12345
 np.random.seed(seed)
 set_seed(seed)
 
-outrootname = "QModel"
+outrootname = "prova_download"
 Nfolder = check_output("if [ ! -d \"" + outrootname + "\" ]; then mkdir \"" + outrootname + "\";fi",shell=True)
 Nfolder = check_output("if [ ! -d \"" + outrootname + "/hist\" ]; then mkdir \"" + outrootname + "/hist\";fi",shell=True)
+
+def data_upload(datapath,name):
+    '''
+    Function to load data from disk or using an URL.
+    Parameters
+    ----------
+    datapath : String
+        path (local or URL) of data in csv format.
+    Returns
+    -------
+    pandas.dataframe
+        Dataframe containing data used for training and/or inference.
+    '''
+    if("http" in datapath):
+        print("Downloading Dataset")
+        try:
+            # Download
+            dataset = requests.get(datapath)
+            dataset.raise_for_status()
+        except requests.exceptions.RequestException:
+            print("Error: Could not download file")
+            raise        
+        # Writing dataset on disk.    
+        with open(outrootname+"/"+name+".csv","wb") as o:
+            o.write(dataset.content)
+        datapath = outrootname+"/"+name+".csv"
+    print("Loading Dataset from Disk")
+    
+    # Reading dataset and creating pandas.DataFrame.
+    dataset = pd.read_csv(datapath,header=0)
+    print("Entries ", len(dataset))        
+    
+    return dataset
 
 
 def preprocess_features(muon_dataframe):
@@ -102,8 +136,8 @@ def datasets():
         No error code.
 
     '''
-    out_dataframe = pd.read_csv('../output/bxcut_full_muon.csv')
-    muon_dataframe_test = pd.read_csv('../output/bxcut_full_test.csv')
+    out_dataframe = data_upload("https://www.dropbox.com/s/m8ahte2xcwby8ew/bxcut_full_muon.csv?dl=1","bxcut_full_muon.csv")
+    muon_dataframe_test = data_upload("https://www.dropbox.com/s/9pxb63k60cz4hif/bxcut_full_test.csv?dl=1",'bxcut_full_test.csv')
     
     out_dataframe["1dtPrimitive.phiB"] = out_dataframe["1dtPrimitive.phiB"]/512.
     out_dataframe["2dtPrimitive.phiB"] = out_dataframe["2dtPrimitive.phiB"]/512.
@@ -144,8 +178,8 @@ def datasets():
     
     out_dataframe = out_dataframe[out_dataframe['genParticle.pt'] <= 200]
     muon_dataframe_test = muon_dataframe_test[muon_dataframe_test['genParticle.pt'] <= 200]
-    # muon_dataframe_test.to_csv("muon_test.csv")
-    # out_dataframe.to_csv("out_data.csv")
+    muon_dataframe_test.to_csv("muon_test.csv")
+    out_dataframe.to_csv("out_data.csv")
     return 0
 
 def preproc(test=False):
@@ -165,8 +199,17 @@ def preproc(test=False):
         if test=False: numpy arrays containing input data and true labels respectively for testing.
 
     '''
-    out_dataframe = pd.read_csv('out_data.csv')
-    muon_dataframe_test = pd.read_csv('muon_test.csv')
+    try:
+        
+        out_dataframe = pd.read_csv('out_data.csv')
+    except FileNotFoundError:
+        datasets()
+        out_dataframe = pd.read_csv('out_data.csv')
+    try:
+        muon_dataframe_test = pd.read_csv('muon_test.csv')
+    except FileNotFoundError:
+        datasets()
+        muon_dataframe_test = pd.read_csv('muon_test.csv')
     
     X = preprocess_features(out_dataframe)
     X_test = preprocess_features(muon_dataframe_test)
@@ -236,7 +279,7 @@ def Q_baseline_model(size,epochs,optimizer,X_training,y_training,X_validation,y_
         Array of final weights used in the model for later inference.
 
     '''
-    pruning = True
+    pruning = False
     # create model
     name="RMSE validation"
     name2="RMSE training"
@@ -254,17 +297,17 @@ def Q_baseline_model(size,epochs,optimizer,X_training,y_training,X_validation,y_
     model.add(QDense(15,kernel_quantizer=quantized_bits(16,1),bias_quantizer=quantized_bits(16,1)))
     model.add(QActivation(activation=quantized_relu(16,1), name='relu5'))
     
-    # model.add(QDense(50,  input_shape=(27,),kernel_quantizer=quantized_bits(16,1),bias_quantizer=quantized_bits(16,1), kernel_initializer='random_normal'))
+    # model.add(QDense(80,  input_shape=(27,),kernel_quantizer=quantized_bits(16,1),bias_quantizer=quantized_bits(16,1), kernel_initializer='random_normal'))
     # model.add(QActivation(activation=quantized_relu(16,1), name='relu1'))
-    # model.add(QDense(25,kernel_quantizer=quantized_bits(16,1),bias_quantizer=quantized_bits(16,1)))
+    # model.add(QDense(50,kernel_quantizer=quantized_bits(16,1),bias_quantizer=quantized_bits(16,1)))
     # model.add(QActivation(activation=quantized_relu(16,1), name='relu2'))
-    # model.add(QDense(10,kernel_quantizer=quantized_bits(16,1),bias_quantizer=quantized_bits(16,1)))
+    # model.add(QDense(35,kernel_quantizer=quantized_bits(16,1),bias_quantizer=quantized_bits(16,1)))
     # model.add(QActivation(activation=quantized_relu(16,1), name='relu3'))   
-    # # model.add(Dropout(rate=0.2))
+    # # # model.add(Dropout(rate=0.2))
     model.add(QDense(1,kernel_quantizer=quantized_bits(16,1)))
     model.add(QActivation(activation=quantized_relu(16,1), name='relu6'))
     #model.add(Activation("sigmoid"))
-    
+    # model.add(QActivation(activation=quantized_tanh(16,1),name='tanh'))
     if pruning == True:
         print("////////////////////////Training Model with pruning")
         pruning_params = {"pruning_schedule" : pruning_schedule.ConstantSparsity(0.75, begin_step=2000, frequency=100)}
@@ -395,20 +438,21 @@ def run(X,Y):
     x_train, x_valid, y_train, y_valid = train_test_split(X, Y, test_size=0.2,random_state=seed)
     initial_lr = 0.001
     #learning_schedule = ExponentialDecay(initial_lr,decay_steps=10000,decay_rate=0.96,staircase=True)
-    adam = Adam(learning_rate=initial_lr) #Default 0.001
+    adam = Adam(learning_rate=initial_lr) #Default 0.001 epochs 130
+    #shallow 200,200-150,250 deep 300,130
     model,w = Q_baseline_model(300,130,adam,x_train, y_train, x_valid, y_valid,'Adam.png')
     model.save(outrootname + '/' + outrootname + '.h5',)
     np.savetxt(outrootname + '/' +"hist/weights_1.csv",w[0][0],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/weights_2.csv",w[2][0],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/weights_3.csv",w[4][0],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/weights_4.csv",w[6][0],delimiter=',')
-    np.savetxt(outrootname + '/' +"hist/weights_5.csv",w[8][0],delimiter=',')
-    np.savetxt(outrootname + '/' +"hist/weights_6.csv",w[10][0],delimiter=',')
+    #np.savetxt(outrootname + '/' +"hist/weights_5.csv",w[8][0],delimiter=',')
+    #np.savetxt(outrootname + '/' +"hist/weights_6.csv",w[10][0],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/bias_1.csv",w[0][1],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/bias_2.csv",w[2][1],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/bias_3.csv",w[4][1],delimiter=',')
     np.savetxt(outrootname + '/' +"hist/bias_4.csv",w[6][1],delimiter=',')
-    np.savetxt(outrootname + '/' +"hist/bias_5.csv",w[8][1],delimiter=',')
-    np.savetxt(outrootname + '/' +"hist/bias_6.csv",w[10][1],delimiter=',')
+    #np.savetxt(outrootname + '/' +"hist/bias_5.csv",w[8][1],delimiter=',')
+    #np.savetxt(outrootname + '/' +"hist/bias_6.csv",w[10][1],delimiter=',')
     return model,w
 
