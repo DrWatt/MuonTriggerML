@@ -1,5 +1,5 @@
-# Tommaso  -  Machine Learning and Muons
-
+# FPGA implementation of Muon Momentum assignment with Machine Learning at the CMS Level-1 Trigger
+### Forked from this [repository](https://github.com/Tommaso93/MuonTriggerML)
 ## Python script from ROOT file to flat CSV
 This code allows to read ROOT file content directly into a flat CSV file.
 
@@ -51,3 +51,4 @@ dtPrimitive.bx==0    Bunch-Crossing required to be =0 in order to avoid all issu
 The folder ** Jupyter Notebooks ** contains a list of the notebooks used for the Muon Trigger ML project. It contains a pre-process data macro used after ROOTtoCSV.py software, the Keras model macro and the ROOT plots production macro.
 The ** output ** folder, instead, contains the csv files produced during the process as well as the keras models. 
 
+This repository was created for Marco Lorusso's Master Thesis. This work is built upon Tommaso Diotalevi's [Master Thesis](https://amslaurea.unibo.it/16326/), where the possibility of exploiting NNs to perform muon transverse momentum assignment was initially explored for the first time. 
