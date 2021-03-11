@@ -48,7 +48,14 @@ dtPrimitive.bx==0    Bunch-Crossing required to be =0 in order to avoid all issu
 
 ## Content of the repo
 
-The folder ** Jupyter Notebooks ** contains a list of the notebooks used for the Muon Trigger ML project. It contains a pre-process data macro used after ROOTtoCSV.py software, the Keras model macro and the ROOT plots production macro.
-The ** output ** folder, instead, contains the csv files produced during the process as well as the keras models. 
+### Folders in the initial branch
+The folder **Jupyter Notebooks** contains a list of the notebooks used for the Muon Trigger ML project. It contains a pre-process data macro used after ROOTtoCSV.py software, the Keras model macro and the ROOT plots production macro.
+The **output** folder, instead, contains the csv files produced during the process as well as the keras models. 
 
-This repository was created for Marco Lorusso's Master Thesis. This work is built upon Tommaso Diotalevi's [Master Thesis](https://amslaurea.unibo.it/16326/), where the possibility of exploiting NNs to perform muon transverse momentum assignment was initially explored for the first time. 
+### New folders after the fork
+
+The **Q Model** folder contains the two Python scripts used for building and training the models using QKeras, and translating the models into HLS project via the __hls4ml__ package.
+In the **Vivado HLS firmware** folder there are the files produced by __hls4ml__ and then synthesized using Vivado HLS. While, in the **Vivado SDK Application** there is the application run in the Vivado SDK to perform the inference on the FPGA.
+
+
+This repository was created for Marco Lorusso's Master Thesis. This work is built upon Tommaso Diotalevi's [Master Thesis](https://amslaurea.unibo.it/16326/), where the possibility of exploiting NNs to perform muon transverse momentum assignment was initially explored. 
